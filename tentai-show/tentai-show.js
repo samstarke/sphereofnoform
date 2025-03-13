@@ -1,76 +1,88 @@
 document.addEventListener("DOMContentLoaded", function() {
     const grid = document.getElementById("grid");
-    const buttons = document.querySelectorAll("#controls button");
+    const presetButtons = document.querySelectorAll("#controls button[data-width]");
+    const applyCustomButton = document.getElementById("apply-custom");
+    const widthInput = document.getElementById("width-input");
+    const heightInput = document.getElementById("height-input");
 
     // Constants for line thickness
     const inactiveThickness = 2;  // thin
     const activeThickness = 4;    // thicker
     const cellSize = 50;          // each cell is 50px square
 
-    grid.dataset.cellSize = cellSize;
-
     /**
      * Positions and sizes a vertical or horizontal edge so that it overlaps
-     * adjacent edges at the corners by half its thickness, preventing gaps.
+     * adjacent edges at the corners by half its thickness.
      */
     function setEdgeGeometry(edge, thickness) {
         const orientation = edge.dataset.orientation;
         const row = parseInt(edge.dataset.row, 10);
         const col = parseInt(edge.dataset.col, 10);
-        const size = parseInt(grid.dataset.size, 10);
-        const cell = parseInt(grid.dataset.cellSize, 10);
+        const gridWidth = parseInt(grid.dataset.gridWidth, 10);
+        const gridHeight = parseInt(grid.dataset.gridHeight, 10);
 
+        // Each cell is cellSize × cellSize
         if (orientation === "vertical") {
-            // Overlap half thickness above and below
             edge.style.width = thickness + "px";
-            edge.style.height = (cell + thickness) + "px";
-            edge.style.left = (col * cell - thickness / 2) + "px";
-            edge.style.top = (row * cell - thickness / 2) + "px";
+            edge.style.height = (cellSize + thickness) + "px";
+            edge.style.left = (col * cellSize - thickness / 2) + "px";
+            edge.style.top = (row * cellSize - thickness / 2) + "px";
         } else {
             // horizontal
-            // Overlap half thickness on the left and right
-            edge.style.width = (cell + thickness) + "px";
+            edge.style.width = (cellSize + thickness) + "px";
             edge.style.height = thickness + "px";
-            edge.style.left = (col * cell - thickness / 2) + "px";
-            edge.style.top = (row * cell - thickness / 2) + "px";
+            edge.style.left = (col * cellSize - thickness / 2) + "px";
+            edge.style.top = (row * cellSize - thickness / 2) + "px";
         }
     }
 
-    // Updates an edge's geometry based on its active state
+    /**
+     * Updates an edge's geometry based on its active state.
+     */
     function updateEdgeStyle(edge) {
         const isActive = edge.classList.contains("active");
         const thickness = isActive ? activeThickness : inactiveThickness;
         setEdgeGeometry(edge, thickness);
     }
 
-    // Toggle the edge's active state and update geometry
+    /**
+     * Toggles the edge's active state and updates geometry.
+     */
     function toggleEdge(edge) {
         edge.classList.toggle("active");
         updateEdgeStyle(edge);
     }
 
     /**
-     * Creates the grid for the given size.
-     * Only internal edges (col = 1..size-1, row = 1..size-1) are created.
+     * Creates a grid of size (width × height) in cells.
+     * Only internal edges are created:
+     *  - Vertical edges: col = 1..width-1, row = 0..height
+     *  - Horizontal edges: row = 1..height-1, col = 0..width
      */
-    function createGrid(size) {
-        grid.dataset.size = size;
-        const totalSize = cellSize * size;
-        grid.style.width = totalSize + "px";
-        grid.style.height = totalSize + "px";
+    function createGrid(width, height) {
+        // Store grid dimensions in dataset
+        grid.dataset.gridWidth = width;
+        grid.dataset.gridHeight = height;
 
-        // Clear any previous grid elements
+        // Calculate total pixel size
+        const totalWidth = cellSize * width;
+        const totalHeight = cellSize * height;
+
+        // Adjust container size
+        grid.style.width = totalWidth + "px";
+        grid.style.height = totalHeight + "px";
+
+        // Clear any existing edges
         grid.innerHTML = "";
 
         // Create vertical internal edges
-        for (let col = 1; col < size; col++) {
-            for (let row = 0; row < size; row++) {
+        for (let col = 1; col < width; col++) {
+            for (let row = 0; row < height; row++) {
                 const vEdge = document.createElement("div");
                 vEdge.classList.add("edge");
                 vEdge.dataset.orientation = "vertical";
                 vEdge.dataset.row = row;
                 vEdge.dataset.col = col;
-                // Initially not active
                 vEdge.classList.remove("active");
                 updateEdgeStyle(vEdge);
 
@@ -84,14 +96,13 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         // Create horizontal internal edges
-        for (let row = 1; row < size; row++) {
-            for (let col = 0; col < size; col++) {
+        for (let row = 1; row < height; row++) {
+            for (let col = 0; col < width; col++) {
                 const hEdge = document.createElement("div");
                 hEdge.classList.add("edge");
                 hEdge.dataset.orientation = "horizontal";
                 hEdge.dataset.row = row;
                 hEdge.dataset.col = col;
-                // Initially not active
                 hEdge.classList.remove("active");
                 updateEdgeStyle(hEdge);
 
@@ -106,12 +117,14 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     /**
-     * Click anywhere on the grid container (not on an edge) toggles
+     * Click anywhere on the grid container (not on an edge) to toggle
      * the nearest internal edge in the clicked cell.
      */
     grid.addEventListener("click", function(e) {
         if (e.target === grid) {
-            const size = parseInt(grid.dataset.size, 10);
+            const gridWidth = parseInt(grid.dataset.gridWidth, 10);
+            const gridHeight = parseInt(grid.dataset.gridHeight, 10);
+
             const offsetX = e.offsetX;
             const offsetY = e.offsetY;
             const col = Math.floor(offsetX / cellSize);
@@ -125,23 +138,26 @@ document.addEventListener("DOMContentLoaded", function() {
             const minDist = Math.min(distLeft, distRight, distTop, distBottom);
 
             let candidateEdge = null;
+            // left boundary
             if (minDist === distLeft && col > 0) {
-                // Left boundary
                 candidateEdge = grid.querySelector(
                   `.edge[data-orientation="vertical"][data-col="${col}"][data-row="${row}"]`
                 );
-            } else if (minDist === distRight && col < size - 1) {
-                // Right boundary
+            }
+            // right boundary
+            else if (minDist === distRight && col < gridWidth) {
                 candidateEdge = grid.querySelector(
                   `.edge[data-orientation="vertical"][data-col="${col + 1}"][data-row="${row}"]`
                 );
-            } else if (minDist === distTop && row > 0) {
-                // Top boundary
+            }
+            // top boundary
+            else if (minDist === distTop && row > 0) {
                 candidateEdge = grid.querySelector(
                   `.edge[data-orientation="horizontal"][data-row="${row}"][data-col="${col}"]`
                 );
-            } else if (minDist === distBottom && row < size - 1) {
-                // Bottom boundary
+            }
+            // bottom boundary
+            else if (minDist === distBottom && row < gridHeight) {
                 candidateEdge = grid.querySelector(
                   `.edge[data-orientation="horizontal"][data-row="${row + 1}"][data-col="${col}"]`
                 );
@@ -153,14 +169,22 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // Button listeners
-    buttons.forEach(button => {
+    // Preset button listeners (for 5x5, 7x7, etc.)
+    presetButtons.forEach(button => {
         button.addEventListener("click", function() {
-            const size = parseInt(this.getAttribute("data-size"), 10);
-            createGrid(size);
+            const w = parseInt(this.getAttribute("data-width"), 10);
+            const h = parseInt(this.getAttribute("data-height"), 10);
+            createGrid(w, h);
         });
     });
 
-    // Initialize with a default 7x7 grid
-    createGrid(7);
+    // Custom "Apply" button listener
+    applyCustomButton.addEventListener("click", function() {
+        const w = parseInt(widthInput.value, 10) || 1;
+        const h = parseInt(heightInput.value, 10) || 1;
+        createGrid(w, h);
+    });
+
+    // Initialize with a default 7×7 grid
+    createGrid(7, 7);
 });
